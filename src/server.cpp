@@ -29,10 +29,14 @@ struct Headers
   {
     host = extract_header(msg_str, "Host: ");
     user_agent = extract_header(msg_str, "User-Agent: ");
+    content_type = extract_header(msg_str, "Content Type: ");
+    content_length = extract_header(msg_str, "Content Length: ");
   }
   std::string host;
   std::string user_agent;
   std::string accept;
+  std::string content_type;
+  std::string content_length;
 };
 
 bool is_target_type(const std::string& type_str, const std::string& target)
@@ -59,6 +63,25 @@ bool is_files_endpoint(const std::string& target)
   return is_target_type(files_str, target);
 }
 
+enum class Http_method
+{
+  GET,
+  POST,
+  NONE
+};
+
+Http_method string_to_http_method(const std::string& s)
+{
+  if (s == "GET")
+  {
+    return Http_method::GET;
+  }
+  if (s == "POST")
+  {
+    return Http_method::POST;
+  }  
+  else return Http_method::NONE;
+}
 struct Http_request
 {
   Http_request(char msg[])
@@ -68,7 +91,7 @@ struct Http_request
 
     size_t start_pos = 0;
     auto end_pos = msg_str.find(" ", start_pos);
-    method = msg_str.substr(start_pos, end_pos-start_pos);
+    method = string_to_http_method(msg_str.substr(start_pos, end_pos-start_pos));
 
     start_pos = end_pos + 1; 
     end_pos = msg_str.find(" ", start_pos);
@@ -81,14 +104,42 @@ struct Http_request
     start_pos = end_pos + 1; 
     auto headers_str = msg_str.substr(start_pos, std::string::npos);
     headers = Headers{headers_str};
+
+    auto body_delim = crlf + crlf;
+    auto body_start_pos = msg_str.find(body_delim, start_pos) + body_delim.length();
+    body = msg_str.substr(body_start_pos, std::string::npos);
   } 
-  std::string method;
+  Http_method method;
   std::string target;
   std::string version;
   Headers headers;
   std::string body;
 };
 
+bool handle_read_from_file(std::string& body, std::string& headers, const std::string& file_path, const Http_request& http_request)
+{
+  std::string crlf = "\r\n"; 
+  
+  FILE* fp = fopen(file_path.c_str(), "r");
+  if (fp)
+  {
+    std::cout << "Found file: " << file_path << std::endl;
+    char buf[1000] = "";
+    fgets(buf, sizeof(buf), fp);
+    body = buf;
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    std::cout << "Size: " << file_size << std::endl;
+    headers += "Content-Type: application/octet-stream" + crlf;
+    headers += "Content-Length: " + std::to_string(file_size) + crlf;
+    fclose(fp);
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
 
 
 int main(int argc, char **argv) {
@@ -161,6 +212,7 @@ int main(int argc, char **argv) {
 
     if (is_echo_endpoint(http_request.target))
     {
+      std::cout << "Echo endpoint" << std::endl;
       std::string echo_str = "/echo/";
       auto start_pos = http_request.target.find(echo_str.c_str(), 0) + echo_str.length();
       body = http_request.target.substr(start_pos, std::string::npos);
@@ -169,32 +221,31 @@ int main(int argc, char **argv) {
     }
     else if (is_user_agent_endpoint(http_request.target))
     {
+      std::cout << "User-Agent endpoint" << std::endl;
       body = http_request.headers.user_agent;
       headers += "Content-Type: text/plain" + crlf;
       headers += "Content-Length: " + std::to_string(body.size()) + crlf;
     }
     else if (is_files_endpoint(http_request.target))
     {
-      std::cout << "FILES!" << std::endl;
+      std::cout << "Files endpoint" << std::endl;
       std::string files_str = "/files/";
       auto start_pos = http_request.target.find(files_str.c_str(), 0) + files_str.length();
       std::string file_name = http_request.target.substr(start_pos, std::string::npos);
       std::string file_path = dir_path + file_name;
-      FILE* fp = fopen(file_path.c_str(), "r");
-      if (fp)
+
+      bool isSuccess = false;
+      switch(http_request.method)
       {
-        std::cout << "Found file: " << file_path << std::endl;
-        char buf[1000] = "";
-        fgets(buf, sizeof(buf), fp);
-        body = buf;
-        fseek(fp, 0, SEEK_END);
-        long file_size = ftell(fp);
-        std::cout << "Size: " << file_size << std::endl;
-        headers += "Content-Type: application/octet-stream" + crlf;
-        headers += "Content-Length: " + std::to_string(file_size) + crlf;
-        fclose(fp);
+        case Http_method::GET:
+          isSuccess = handle_read_from_file(body, headers, file_path, http_request);
+          break;
+        case Http_method::POST:
+          isSuccess = handle_write_to_file(body, headers, file_path, http_request);
+        default:
+          break;
       }
-      else
+      if (!isSuccess)
       {
         std::cout << "No file: " << file_path << std::endl;
         status_code = "404 ";
