@@ -8,6 +8,61 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+struct Headers
+{
+  Headers() = default;
+  Headers(std::string msg_str)
+  {
+    std::string crlf{"\r\n"};
+
+    auto start_pos = msg_str.find("Host:", 0);
+    auto end_pos = msg_str.find(crlf, start_pos);
+    host = msg_str.substr(start_pos, end_pos-start_pos);
+
+    // start_pos = msg_str.find("User-Agent:", 0);
+    // end_pos = msg_str.find(crlf, start_pos);
+    // user_agent = msg_str.substr(start_pos, end_pos-start_pos);
+    
+    // start_pos = msg_str.find("Accept:", 0);
+    // end_pos = msg_str.find(crlf, start_pos);
+    // accept = msg_str.substr(start_pos, end_pos-start_pos);
+  }
+  std::string host;
+  std::string user_agent;
+  std::string accept;
+};
+
+struct Http_request
+{
+  Http_request(char msg[])
+  {
+    std::string msg_str{msg};
+    std::string crlf{"\r\n"};
+
+    size_t start_pos = 0;
+    auto end_pos = msg_str.find(" ", start_pos);
+    method = msg_str.substr(start_pos, end_pos-start_pos);
+
+    start_pos = end_pos + 1; 
+    end_pos = msg_str.find(" ", start_pos);
+    target = msg_str.substr(start_pos, end_pos-start_pos);
+
+    start_pos = end_pos + 1; 
+    end_pos = msg_str.find(crlf, start_pos);
+    version = msg_str.substr(start_pos, end_pos-start_pos);
+
+    start_pos = end_pos + 1; 
+    auto headers_str = msg_str.substr(start_pos, std::string::npos);
+    headers = Headers{headers_str};
+  } 
+  std::string method;
+  std::string target;
+  std::string version;
+  Headers headers;
+  std::string body;
+};
+
+
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
   std::cout << std::unitbuf;
@@ -51,18 +106,39 @@ int main(int argc, char **argv) {
   
   std::cout << "Waiting for a client to connect...\n";
   
-  int client_id = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+  int clientSocket = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
 
-  std::string crlf = "\r\n"; 
-  std::string status_code = "200 "; 
-  std::string reason_phrase = "OK"; 
-  std::string http_version = "HTTP/1.1 "; 
-  std::string headers = ""; 
-  std::string body = ""; 
-  std::string message = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
+  for (int i = 0; i < 2; ++i)
+  {
+    char buffer[1024] = {0};
+    recv(clientSocket, buffer, sizeof(buffer), 0);
+    Http_request http_request{buffer};
+    std::cout << "Message from client: " << buffer << std::endl;
+    std::cout << "Method: " << http_request.method <<"!EST"<< std::endl;
+    std::cout << "Target: " << http_request.target <<"!EST"<< std::endl;
+    std::cout << "Version: " << http_request.version <<"!EST"<< std::endl;
+    std::cout << "Headers.host: " << http_request.headers.host <<"!EST"<< std::endl;
 
-  send(client_id, message.c_str(), message.length(), 0);
-  std::cout << "Client connected\n";
+
+
+    std::string crlf = "\r\n"; 
+    std::string http_version = "HTTP/1.1 "; 
+    std::string headers = ""; 
+    std::string body = ""; 
+
+    std::string valid_target = "/";
+    std::string status_code = "200 "; 
+    std::string reason_phrase = "OK"; 
+    if (http_request.target != valid_target)
+    {
+      status_code = "404 ";
+      reason_phrase = "Not Found";
+    }
+
+    std::string message = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
+
+    send(clientSocket, message.c_str(), message.length(), 0);
+  }  
 
   close(server_fd);
 
