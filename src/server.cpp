@@ -8,10 +8,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-
+const std::string crlf = "\r\n"; 
+ 
 std::string extract_header(const std::string msg_str, const std::string header_str)
 {
-  const std::string crlf{"\r\n"};
   auto start_pos = msg_str.find(header_str, 0) + header_str.length();
   auto end_pos = msg_str.find(crlf, start_pos);
   if (end_pos != std::string::npos)
@@ -87,7 +87,6 @@ struct Http_request
   Http_request(char msg[])
   {
     std::string msg_str{msg};
-    std::string crlf{"\r\n"};
 
     size_t start_pos = 0;
     auto end_pos = msg_str.find(" ", start_pos);
@@ -117,9 +116,7 @@ struct Http_request
 };
 
 bool handle_read_from_file(std::string& body, std::string& headers, const std::string& file_path, const Http_request& http_request)
-{
-  std::string crlf = "\r\n"; 
-  
+{  
   FILE* fp = fopen(file_path.c_str(), "r");
   if (fp)
   {
@@ -132,6 +129,22 @@ bool handle_read_from_file(std::string& body, std::string& headers, const std::s
     std::cout << "Size: " << file_size << std::endl;
     headers += "Content-Type: application/octet-stream" + crlf;
     headers += "Content-Length: " + std::to_string(file_size) + crlf;
+    fclose(fp);
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+bool handle_write_to_file(std::string& body, std::string& headers, const std::string& file_path, const Http_request& http_request)
+{  
+  FILE* fp = fopen(file_path.c_str(), "w");
+  if (fp)
+  {
+    std::cout << "Created file: " << file_path << std::endl;
+    fprintf(fp, http_request.body.c_str());
     fclose(fp);
     return true;
   }
@@ -203,7 +216,6 @@ int main(int argc, char **argv) {
     Http_request http_request{buffer};
     std::cout << "Message from client: " << buffer << std::endl;
 
-    std::string crlf = "\r\n"; 
     std::string http_version = "HTTP/1.1 "; 
     std::string headers = ""; 
     std::string body = ""; 
@@ -241,7 +253,11 @@ int main(int argc, char **argv) {
           isSuccess = handle_read_from_file(body, headers, file_path, http_request);
           break;
         case Http_method::POST:
-          isSuccess = handle_write_to_file(body, headers, file_path, http_request);
+          if (isSuccess = handle_write_to_file(body, headers, file_path, http_request))
+          {
+            status_code = "201 ";
+            reason_phrase = "Created";
+          }          
         default:
           break;
       }
