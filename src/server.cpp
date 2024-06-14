@@ -8,24 +8,27 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+
+std::string extract_header(const std::string msg_str, const std::string header_str)
+{
+  const std::string crlf{"\r\n"};
+  auto start_pos = msg_str.find(header_str, 0) + header_str.length();
+  auto end_pos = msg_str.find(crlf, start_pos);
+  if (end_pos != std::string::npos)
+  {
+    return msg_str.substr(start_pos, end_pos-start_pos);
+  }
+
+  return "";
+}
+
 struct Headers
 {
   Headers() = default;
   Headers(std::string msg_str)
   {
-    std::string crlf{"\r\n"};
-
-    auto start_pos = msg_str.find("Host:", 0);
-    auto end_pos = msg_str.find(crlf, start_pos);
-    host = msg_str.substr(start_pos, end_pos-start_pos);
-
-    // start_pos = msg_str.find("User-Agent:", 0);
-    // end_pos = msg_str.find(crlf, start_pos);
-    // user_agent = msg_str.substr(start_pos, end_pos-start_pos);
-    
-    // start_pos = msg_str.find("Accept:", 0);
-    // end_pos = msg_str.find(crlf, start_pos);
-    // accept = msg_str.substr(start_pos, end_pos-start_pos);
+    host = extract_header(msg_str, "Host: ");
+    user_agent = extract_header(msg_str, "User-Agent: ");
   }
   std::string host;
   std::string user_agent;
@@ -37,9 +40,14 @@ bool is_echo_endpoint(const std::string& target)
   return target.substr(0, 6) == "/echo/";
 }
 
+bool is_user_agent_endpoint(const std::string& target)
+{
+  const std::string user_agent_str = "/user-agent";
+  return target.substr(0, user_agent_str.length()) == user_agent_str;
+}
+
 bool target_valid(const std::string& target)
 {
-  std::cout << "target_valid: " << target << std::endl;
   if (target == "/")
   {
     return true;
@@ -48,7 +56,10 @@ bool target_valid(const std::string& target)
   {
     return true;
   }
-  
+  if (is_user_agent_endpoint(target))
+  {
+    return true;
+  }
   return false;
 }
 
@@ -129,46 +140,47 @@ int main(int argc, char **argv) {
   
   int clientSocket = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
 
-  for (int i = 0; i < 2; ++i)
+
+  char buffer[1024] = {0};
+  recv(clientSocket, buffer, sizeof(buffer), 0);
+  Http_request http_request{buffer};
+  std::cout << "Message from client: " << buffer << std::endl;
+  std::cout << "Method: " << http_request.method <<"|"<< std::endl;
+  std::cout << "Target: " << http_request.target <<"|"<< std::endl;
+  std::cout << "Version: " << http_request.version <<"|"<< std::endl;
+  std::cout << "Headers.host: " << http_request.headers.host <<"|"<< std::endl;
+
+  std::string crlf = "\r\n"; 
+  std::string http_version = "HTTP/1.1 "; 
+  std::string headers = ""; 
+  std::string body = ""; 
+  std::string status_code = "200 "; 
+  std::string reason_phrase = "OK"; 
+  if (!target_valid(http_request.target))
   {
-    char buffer[1024] = {0};
-    recv(clientSocket, buffer, sizeof(buffer), 0);
-    Http_request http_request{buffer};
-    std::cout << "Message from client: " << buffer << std::endl;
-    std::cout << "Method: " << http_request.method <<"|"<< std::endl;
-    std::cout << "Target: " << http_request.target <<"|"<< std::endl;
-    std::cout << "Version: " << http_request.version <<"|"<< std::endl;
-    std::cout << "Headers.host: " << http_request.headers.host <<"|"<< std::endl;
+    status_code = "404 ";
+    reason_phrase = "Not Found";
+  }
 
+  if (is_echo_endpoint(http_request.target))
+  {
+    std::string echo_str = "/echo/";
+    auto start_pos = http_request.target.find(echo_str.c_str(), 0) + echo_str.length();
+    body = http_request.target.substr(start_pos, std::string::npos);
+    headers += "Content-Type: text/plain" + crlf;
+    headers += "Content-Length: " + std::to_string(body.size()) + crlf;
+  }
 
+  if (is_user_agent_endpoint(http_request.target))
+  {
+    body = http_request.headers.user_agent;
+    headers += "Content-Type: text/plain" + crlf;
+    headers += "Content-Length: " + std::to_string(body.size()) + crlf;
+  }
 
-    std::string crlf = "\r\n"; 
-    std::string http_version = "HTTP/1.1 "; 
-    std::string headers = ""; 
-    std::string body = ""; 
+  std::string response = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
 
-    std::string valid_target1 = "/";
-    std::string status_code = "200 "; 
-    std::string reason_phrase = "OK"; 
-    if (!target_valid(http_request.target))
-    {
-      status_code = "404 ";
-      reason_phrase = "Not Found";
-    }
-
-    if (is_echo_endpoint(http_request.target))
-    {
-      std::string echo_str = "/echo/";
-      auto start_pos = http_request.target.find(echo_str.c_str(), 0) + echo_str.length();
-      body = http_request.target.substr(start_pos, std::string::npos);
-      headers += "Content-Type: text/plain" + crlf;
-      headers += "Content-Length: " + std::to_string(body.size()) + crlf;
-    }
-
-    std::string message = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
-
-    send(clientSocket, message.c_str(), message.length(), 0);
-  }  
+  send(clientSocket, response.c_str(), response.length(), 0);
 
   close(server_fd);
 
