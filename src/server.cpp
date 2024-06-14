@@ -137,51 +137,54 @@ int main(int argc, char **argv) {
   int client_addr_len = sizeof(client_addr);
   
   std::cout << "Waiting for a client to connect...\n";
+
+  while (true)  
+  {
+    int clientSocket = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+
+
+    char buffer[1024] = {0};
+    recv(clientSocket, buffer, sizeof(buffer), 0);
+    Http_request http_request{buffer};
+    std::cout << "Message from client: " << buffer << std::endl;
+    std::cout << "Method: " << http_request.method <<"|"<< std::endl;
+    std::cout << "Target: " << http_request.target <<"|"<< std::endl;
+    std::cout << "Version: " << http_request.version <<"|"<< std::endl;
+    std::cout << "Headers.host: " << http_request.headers.host <<"|"<< std::endl;
+
+    std::string crlf = "\r\n"; 
+    std::string http_version = "HTTP/1.1 "; 
+    std::string headers = ""; 
+    std::string body = ""; 
+    std::string status_code = "200 "; 
+    std::string reason_phrase = "OK"; 
+    if (!target_valid(http_request.target))
+    {
+      status_code = "404 ";
+      reason_phrase = "Not Found";
+    }
+
+    if (is_echo_endpoint(http_request.target))
+    {
+      std::string echo_str = "/echo/";
+      auto start_pos = http_request.target.find(echo_str.c_str(), 0) + echo_str.length();
+      body = http_request.target.substr(start_pos, std::string::npos);
+      headers += "Content-Type: text/plain" + crlf;
+      headers += "Content-Length: " + std::to_string(body.size()) + crlf;
+    }
+
+    if (is_user_agent_endpoint(http_request.target))
+    {
+      body = http_request.headers.user_agent;
+      headers += "Content-Type: text/plain" + crlf;
+      headers += "Content-Length: " + std::to_string(body.size()) + crlf;
+    }
+
+    std::string response = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
+
+    send(clientSocket, response.c_str(), response.length(), 0);
+  }
   
-  int clientSocket = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-
-
-  char buffer[1024] = {0};
-  recv(clientSocket, buffer, sizeof(buffer), 0);
-  Http_request http_request{buffer};
-  std::cout << "Message from client: " << buffer << std::endl;
-  std::cout << "Method: " << http_request.method <<"|"<< std::endl;
-  std::cout << "Target: " << http_request.target <<"|"<< std::endl;
-  std::cout << "Version: " << http_request.version <<"|"<< std::endl;
-  std::cout << "Headers.host: " << http_request.headers.host <<"|"<< std::endl;
-
-  std::string crlf = "\r\n"; 
-  std::string http_version = "HTTP/1.1 "; 
-  std::string headers = ""; 
-  std::string body = ""; 
-  std::string status_code = "200 "; 
-  std::string reason_phrase = "OK"; 
-  if (!target_valid(http_request.target))
-  {
-    status_code = "404 ";
-    reason_phrase = "Not Found";
-  }
-
-  if (is_echo_endpoint(http_request.target))
-  {
-    std::string echo_str = "/echo/";
-    auto start_pos = http_request.target.find(echo_str.c_str(), 0) + echo_str.length();
-    body = http_request.target.substr(start_pos, std::string::npos);
-    headers += "Content-Type: text/plain" + crlf;
-    headers += "Content-Length: " + std::to_string(body.size()) + crlf;
-  }
-
-  if (is_user_agent_endpoint(http_request.target))
-  {
-    body = http_request.headers.user_agent;
-    headers += "Content-Type: text/plain" + crlf;
-    headers += "Content-Length: " + std::to_string(body.size()) + crlf;
-  }
-
-  std::string response = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
-
-  send(clientSocket, response.c_str(), response.length(), 0);
-
   close(server_fd);
 
   return 0;
