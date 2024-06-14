@@ -51,9 +51,19 @@ int main(int argc, char **argv) {
   
   std::cout << "Waiting for a client to connect...\n";
   
-  accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+  int client_id = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+
+  std::string crlf = "\r\n"; 
+  std::string status_code = "200 "; 
+  std::string reason_phrase = "OK"; 
+  std::string http_version = "HTTP/1.1 "; 
+  std::string headers = ""; 
+  std::string body = ""; 
+  std::string message = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
+
+  send(client_id, message.c_str(), message.length(), 0);
   std::cout << "Client connected\n";
-  
+
   close(server_fd);
 
   return 0;
