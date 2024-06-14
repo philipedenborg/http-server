@@ -114,10 +114,10 @@ int main(int argc, char **argv) {
     recv(clientSocket, buffer, sizeof(buffer), 0);
     Http_request http_request{buffer};
     std::cout << "Message from client: " << buffer << std::endl;
-    std::cout << "Method: " << http_request.method <<"!EST"<< std::endl;
-    std::cout << "Target: " << http_request.target <<"!EST"<< std::endl;
-    std::cout << "Version: " << http_request.version <<"!EST"<< std::endl;
-    std::cout << "Headers.host: " << http_request.headers.host <<"!EST"<< std::endl;
+    std::cout << "Method: " << http_request.method <<"|"<< std::endl;
+    std::cout << "Target: " << http_request.target <<"|"<< std::endl;
+    std::cout << "Version: " << http_request.version <<"|"<< std::endl;
+    std::cout << "Headers.host: " << http_request.headers.host <<"|"<< std::endl;
 
 
 
