@@ -32,6 +32,26 @@ struct Headers
   std::string accept;
 };
 
+bool is_echo_endpoint(const std::string& target)
+{
+  return target.substr(0, 6) == "/echo/";
+}
+
+bool target_valid(const std::string& target)
+{
+  std::cout << "target_valid: " << target << std::endl;
+  if (target == "/")
+  {
+    return true;
+  }
+  if (is_echo_endpoint(target))
+  {
+    return true;
+  }
+  
+  return false;
+}
+
 struct Http_request
 {
   Http_request(char msg[])
@@ -61,6 +81,7 @@ struct Http_request
   Headers headers;
   std::string body;
 };
+
 
 
 int main(int argc, char **argv) {
@@ -126,13 +147,22 @@ int main(int argc, char **argv) {
     std::string headers = ""; 
     std::string body = ""; 
 
-    std::string valid_target = "/";
+    std::string valid_target1 = "/";
     std::string status_code = "200 "; 
     std::string reason_phrase = "OK"; 
-    if (http_request.target != valid_target)
+    if (!target_valid(http_request.target))
     {
       status_code = "404 ";
       reason_phrase = "Not Found";
+    }
+
+    if (is_echo_endpoint(http_request.target))
+    {
+      std::string echo_str = "/echo/";
+      auto start_pos = http_request.target.find(echo_str.c_str(), 0) + echo_str.length();
+      body = http_request.target.substr(start_pos, std::string::npos);
+      headers += "Content-Type: text/plain" + crlf;
+      headers += "Content-Length: " + std::to_string(body.size()) + crlf;
     }
 
     std::string message = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
