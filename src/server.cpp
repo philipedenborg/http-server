@@ -25,18 +25,20 @@ std::string extract_header(const std::string msg_str, const std::string header_s
 struct Headers
 {
   Headers() = default;
-  Headers(std::string msg_str)
+  Headers(const std::string msg_str)
   {
     host = extract_header(msg_str, "Host: ");
     user_agent = extract_header(msg_str, "User-Agent: ");
     content_type = extract_header(msg_str, "Content Type: ");
     content_length = extract_header(msg_str, "Content Length: ");
+    accept_encoding = extract_header(msg_str, "Accept-Encoding: ");
   }
   std::string host;
   std::string user_agent;
   std::string accept;
   std::string content_type;
   std::string content_length;
+  std::string accept_encoding;
 };
 
 bool is_target_type(const std::string& type_str, const std::string& target)
@@ -70,6 +72,65 @@ enum class Http_method
   NONE
 };
 
+enum class HeaderType
+{
+  accept,
+  accept_encoding,
+  content_type,
+  content_length,
+  content_encoding,
+  host,
+  user_agent  
+};
+
+enum class ContentType
+{
+  text_plain,
+  application_octet_stream  
+};
+
+std::string to_string(ContentType contentType)
+{
+  switch (contentType)
+  {
+  case ContentType::text_plain:
+    return "text/plain";
+  case ContentType::application_octet_stream:
+    return "application/octet-stream";
+  default:
+    return "";
+  }
+}
+
+std::string to_string(HeaderType headerType)
+{
+  switch (headerType)
+  {
+  case HeaderType::accept:
+    return "Accept";
+  case HeaderType::accept_encoding:
+    return "Accept-Encoding";
+  case HeaderType::content_encoding:
+    return "Content-Encoding";
+  case HeaderType::content_length:
+    return "Content-Length";
+  case HeaderType::content_type:
+    return "Content-Type";
+  case HeaderType::host:
+    return "Host";
+  case HeaderType::user_agent:
+    return "User-Agent";
+  default:
+    return "";
+    break;
+  }
+}
+
+void add_header(std::string& headers, HeaderType headerType, const std::string& text)
+{
+  headers += to_string(headerType) + ": " + text + crlf;
+}
+
 Http_method string_to_http_method(const std::string& s)
 {
   if (s == "GET")
@@ -82,6 +143,7 @@ Http_method string_to_http_method(const std::string& s)
   }  
   else return Http_method::NONE;
 }
+
 struct Http_request
 {
   Http_request(char msg[])
@@ -115,6 +177,16 @@ struct Http_request
   std::string body;
 };
 
+bool is_supported_encoding(const std::string& accept_encoding)
+{
+  if (accept_encoding == "gzip")
+  {
+    return true;
+  }
+
+  return false;
+}
+
 bool handle_read_from_file(std::string& body, std::string& headers, const std::string& file_path, const Http_request& http_request)
 {  
   FILE* fp = fopen(file_path.c_str(), "r");
@@ -127,8 +199,8 @@ bool handle_read_from_file(std::string& body, std::string& headers, const std::s
     fseek(fp, 0, SEEK_END);
     long file_size = ftell(fp);
     std::cout << "Size: " << file_size << std::endl;
-    headers += "Content-Type: application/octet-stream" + crlf;
-    headers += "Content-Length: " + std::to_string(file_size) + crlf;
+    add_header(headers, HeaderType::content_type, to_string(ContentType::application_octet_stream));
+    add_header(headers, HeaderType::content_length, std::to_string(file_size));
     fclose(fp);
     return true;
   }
@@ -153,7 +225,6 @@ bool handle_write_to_file(std::string& body, std::string& headers, const std::st
     return false;
   }
 }
-
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -228,15 +299,20 @@ int main(int argc, char **argv) {
       std::string echo_str = "/echo/";
       auto start_pos = http_request.target.find(echo_str.c_str(), 0) + echo_str.length();
       body = http_request.target.substr(start_pos, std::string::npos);
-      headers += "Content-Type: text/plain" + crlf;
-      headers += "Content-Length: " + std::to_string(body.size()) + crlf;
+      add_header(headers, HeaderType::content_type, to_string(ContentType::text_plain));
+      add_header(headers, HeaderType::content_length, std::to_string(body.size()));
+      const auto& accept_encoding = http_request.headers.accept_encoding;
+      if (!accept_encoding.empty() && is_supported_encoding(accept_encoding))
+      {
+        add_header(headers, HeaderType::content_encoding, accept_encoding);
+      }
     }
     else if (is_user_agent_endpoint(http_request.target))
     {
       std::cout << "User-Agent endpoint" << std::endl;
       body = http_request.headers.user_agent;
-      headers += "Content-Type: text/plain" + crlf;
-      headers += "Content-Length: " + std::to_string(body.size()) + crlf;
+      add_header(headers, HeaderType::content_type, to_string(ContentType::text_plain));
+      add_header(headers, HeaderType::content_length, std::to_string(body.size()));
     }
     else if (is_files_endpoint(http_request.target))
     {
