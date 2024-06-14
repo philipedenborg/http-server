@@ -35,32 +35,28 @@ struct Headers
   std::string accept;
 };
 
+bool is_target_type(const std::string& type_str, const std::string& target)
+{
+  return target.substr(0, type_str.length()) == type_str;
+}
+
 bool is_echo_endpoint(const std::string& target)
 {
-  return target.substr(0, 6) == "/echo/";
+  const std::string echo_str = "/echo/";
+  return is_target_type(echo_str, target);
 }
 
 bool is_user_agent_endpoint(const std::string& target)
 {
   const std::string user_agent_str = "/user-agent";
-  return target.substr(0, user_agent_str.length()) == user_agent_str;
+  return is_target_type(user_agent_str, target);
+
 }
 
-bool target_valid(const std::string& target)
+bool is_files_endpoint(const std::string& target)
 {
-  if (target == "/")
-  {
-    return true;
-  }
-  if (is_echo_endpoint(target))
-  {
-    return true;
-  }
-  if (is_user_agent_endpoint(target))
-  {
-    return true;
-  }
-  return false;
+  const std::string files_str = "/files";
+  return is_target_type(files_str, target);
 }
 
 struct Http_request
@@ -138,6 +134,14 @@ int main(int argc, char **argv) {
   
   std::cout << "Waiting for a client to connect...\n";
 
+  std::string dir_path;
+  if (argc > 2)
+  {
+      std::cout << "argument 1: " << argv[1] << std::endl;
+      std::cout << "argument 2: " << argv[2] << std::endl;
+      dir_path = argv[2];  
+  }
+
   while (true)  
   {
     int clientSocket = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
@@ -147,10 +151,6 @@ int main(int argc, char **argv) {
     recv(clientSocket, buffer, sizeof(buffer), 0);
     Http_request http_request{buffer};
     std::cout << "Message from client: " << buffer << std::endl;
-    std::cout << "Method: " << http_request.method <<"|"<< std::endl;
-    std::cout << "Target: " << http_request.target <<"|"<< std::endl;
-    std::cout << "Version: " << http_request.version <<"|"<< std::endl;
-    std::cout << "Headers.host: " << http_request.headers.host <<"|"<< std::endl;
 
     std::string crlf = "\r\n"; 
     std::string http_version = "HTTP/1.1 "; 
@@ -158,11 +158,6 @@ int main(int argc, char **argv) {
     std::string body = ""; 
     std::string status_code = "200 "; 
     std::string reason_phrase = "OK"; 
-    if (!target_valid(http_request.target))
-    {
-      status_code = "404 ";
-      reason_phrase = "Not Found";
-    }
 
     if (is_echo_endpoint(http_request.target))
     {
@@ -172,19 +167,52 @@ int main(int argc, char **argv) {
       headers += "Content-Type: text/plain" + crlf;
       headers += "Content-Length: " + std::to_string(body.size()) + crlf;
     }
-
-    if (is_user_agent_endpoint(http_request.target))
+    else if (is_user_agent_endpoint(http_request.target))
     {
       body = http_request.headers.user_agent;
       headers += "Content-Type: text/plain" + crlf;
       headers += "Content-Length: " + std::to_string(body.size()) + crlf;
     }
+    else if (is_files_endpoint(http_request.target))
+    {
+      std::cout << "FILES!" << std::endl;
+      std::string files_str = "/files/";
+      auto start_pos = http_request.target.find(files_str.c_str(), 0) + files_str.length();
+      std::string file_name = http_request.target.substr(start_pos, std::string::npos);
+      std::string file_path = dir_path + file_name;
+      FILE* fp = fopen(file_path.c_str(), "r");
+      if (fp)
+      {
+        std::cout << "Found file: " << file_path << std::endl;
+        char buf[1000] = "";
+        fgets(buf, sizeof(buf), fp);
+        body = buf;
+        fseek(fp, 0, SEEK_END);
+        long file_size = ftell(fp);
+        std::cout << "Size: " << file_size << std::endl;
+        headers += "Content-Type: application/octet-stream" + crlf;
+        headers += "Content-Length: " + std::to_string(file_size) + crlf;
+        fclose(fp);
+      }
+      else
+      {
+        std::cout << "No file: " << file_path << std::endl;
+        status_code = "404 ";
+        reason_phrase = "Not Found";
+      }
+    }
+    else if (http_request.target != "/")
+    {
+      status_code = "404 ";
+      reason_phrase = "Not Found";
+    }
 
     std::string response = http_version + status_code + reason_phrase + crlf + headers + crlf + body;
 
+    std::cout << "Response: " << response << std::endl;
     send(clientSocket, response.c_str(), response.length(), 0);
   }
-  
+
   close(server_fd);
 
   return 0;
