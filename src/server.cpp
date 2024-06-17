@@ -16,48 +16,6 @@ const std::string crlf = "\r\n";
 #include <sstream>
 #include <iomanip>
 
-// std::string gzip(const std::string& data)
-// {
-//     z_stream zs;
-//     memset(&zs, 0, sizeof(zs));
-
-//     if (deflateInit2(&zs, Z_BEST_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-//         throw std::runtime_error("deflateInit2 failed while compressing.");
-//     }
-
-//     zs.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(data.data()));
-//     zs.avail_in = data.size();
-
-//     int ret;
-//     char outbuffer[32768];
-//     std::string outstring;
-
-//     do {
-//         zs.next_out = reinterpret_cast<Bytef*>(outbuffer);
-//         zs.avail_out = sizeof(outbuffer);
-
-//         ret = deflate(&zs, Z_FINISH);
-
-//         if (outstring.size() < zs.total_out) {
-//             outstring.append(outbuffer, zs.total_out - outstring.size());
-//         }
-//     } while (ret == Z_OK);
-
-//     deflateEnd(&zs);
-
-//     if (ret != Z_STREAM_END) {
-//         throw std::runtime_error("Exception during zlib compression: " + std::to_string(ret));
-//     }
-
-//     // Convert to hex string
-//     std::ostringstream hex_stream;
-//     for (unsigned char c : outstring) {
-//         hex_stream << std::hex << std::setw(2) << std::setfill('0') << (int)c;
-//     }
-
-//     return hex_stream.str();
-// }
-
 std::string extract_header(const std::string msg_str, const std::string header_str)
 {
   auto start_pos = msg_str.find(header_str, 0) + header_str.length();
@@ -85,7 +43,9 @@ std::string gzip(const std::string& data)
 {
     z_stream zs;
     memset(&zs, 0, sizeof(zs));
-    deflateInit2(&zs, Z_BEST_COMPRESSION, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY);
+    int window_bits = 31;
+    int mem_level = 8;
+    deflateInit2(&zs, Z_BEST_COMPRESSION, Z_DEFLATED, window_bits, mem_level, Z_DEFAULT_STRATEGY);
     zs.next_in = (Bytef*)data.data();
     zs.avail_in = data.size();
     int ret;
@@ -182,23 +142,6 @@ void add_header(std::string& headers, HeaderType headerType, const std::string& 
 {
   headers += to_string(headerType) + ": " + text + crlf;
 }
-
-// void add_header(std::string& headers, HeaderType headerType, const std::vector<std::string>& text_vect)
-// {
-//   const std::string del = ", ";
-//   headers += to_string(headerType) + ": ";
-//   int count = 0;
-//   for (const auto& t : text_vect)
-//   {
-//     headers += t;
-//     count++;
-//     if (count != text_vect.size())
-//     {
-//       headers += del;
-//     }
-//   }
-//   headers += crlf;
-// }
 
 Http_method string_to_http_method(const std::string& s)
 {
@@ -346,18 +289,8 @@ bool handle_write_to_file(std::string& body, std::string& headers, const std::st
   }
 }
 
-int main(int argc, char **argv) {
-
-  std::cout << "TESTING!\n";
-  std::string testis{"hej1, hej2, hej3"};
-  auto outtestis = split_string(testis, ",");
-  for (auto& s : outtestis)
-  {
-    std::cout << s << ", ";
-  }
-  std::cout << std::endl;
-
-
+int main(int argc, char **argv) 
+{
   // Flush after every std::cout / std::cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
