@@ -7,6 +7,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <vector>
+#include <algorithm>
 
 const std::string crlf = "\r\n"; 
  
@@ -21,25 +23,6 @@ std::string extract_header(const std::string msg_str, const std::string header_s
 
   return "";
 }
-
-struct Headers
-{
-  Headers() = default;
-  Headers(const std::string msg_str)
-  {
-    host = extract_header(msg_str, "Host: ");
-    user_agent = extract_header(msg_str, "User-Agent: ");
-    content_type = extract_header(msg_str, "Content Type: ");
-    content_length = extract_header(msg_str, "Content Length: ");
-    accept_encoding = extract_header(msg_str, "Accept-Encoding: ");
-  }
-  std::string host;
-  std::string user_agent;
-  std::string accept;
-  std::string content_type;
-  std::string content_length;
-  std::string accept_encoding;
-};
 
 bool is_target_type(const std::string& type_str, const std::string& target)
 {
@@ -131,6 +114,23 @@ void add_header(std::string& headers, HeaderType headerType, const std::string& 
   headers += to_string(headerType) + ": " + text + crlf;
 }
 
+void add_header(std::string& headers, HeaderType headerType, const std::vector<std::string>& text_vect)
+{
+  const std::string del = ", ";
+  headers += to_string(headerType) + ": ";
+  int count = 0;
+  for (const auto& t : text_vect)
+  {
+    headers += t;
+    count++;
+    if (count != text_vect.size())
+    {
+      headers += del;
+    }
+  }
+  headers += crlf;
+}
+
 Http_method string_to_http_method(const std::string& s)
 {
   if (s == "GET")
@@ -143,6 +143,42 @@ Http_method string_to_http_method(const std::string& s)
   }  
   else return Http_method::NONE;
 }
+
+std::vector<std::string> split_string(const std::string& str, const std::string& del)
+{
+  std::vector<std::string> result{};
+  size_t start_pos = 0;
+  size_t end_pos = 0;
+  while (end_pos < str.length())
+  {
+    end_pos = str.find(del, start_pos);
+    result.push_back(str.substr(start_pos, end_pos-start_pos));
+    start_pos = end_pos + del.size();    
+  }
+
+  return result;
+}
+
+struct Headers
+{
+  Headers() = default;
+  Headers(const std::string msg_str)
+  {
+    host = extract_header(msg_str, "Host: ");
+    user_agent = extract_header(msg_str, "User-Agent: ");
+    content_type = extract_header(msg_str, "Content Type: ");
+    content_length = extract_header(msg_str, "Content Length: ");
+    auto accept_encoding_str = extract_header(msg_str, "Accept-Encoding: ");
+    accept_encoding = split_string(accept_encoding_str, ", ");
+
+  }
+  std::string host;
+  std::string user_agent;
+  std::string accept;
+  std::string content_type;
+  std::string content_length;
+  std::vector<std::string> accept_encoding;
+};
 
 struct Http_request
 {
@@ -187,6 +223,21 @@ bool is_supported_encoding(const std::string& accept_encoding)
   return false;
 }
 
+std::vector<std::string> get_supported_accept_encoding(const std::vector<std::string> accept_encoding)
+{
+  std::cout << "get_supported_accept_encoding: " << std::endl;
+  
+  std::vector<std::string> result;
+  std::for_each(accept_encoding.begin(), accept_encoding.end(), 
+              [&result](auto& ac)
+              {
+                std::cout << ac << std::endl;
+                if(is_supported_encoding(ac))
+                {result.push_back(ac);}
+              });
+  return result;                              
+}
+
 bool handle_read_from_file(std::string& body, std::string& headers, const std::string& file_path, const Http_request& http_request)
 {  
   FILE* fp = fopen(file_path.c_str(), "r");
@@ -227,6 +278,17 @@ bool handle_write_to_file(std::string& body, std::string& headers, const std::st
 }
 
 int main(int argc, char **argv) {
+
+  std::cout << "TESTING!\n";
+  std::string testis{"hej1, hej2, hej3"};
+  auto outtestis = split_string(testis, ",");
+  for (auto& s : outtestis)
+  {
+    std::cout << s << ", ";
+  }
+  std::cout << std::endl;
+
+
   // Flush after every std::cout / std::cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
@@ -302,9 +364,13 @@ int main(int argc, char **argv) {
       add_header(headers, HeaderType::content_type, to_string(ContentType::text_plain));
       add_header(headers, HeaderType::content_length, std::to_string(body.size()));
       const auto& accept_encoding = http_request.headers.accept_encoding;
-      if (!accept_encoding.empty() && is_supported_encoding(accept_encoding))
+      if (!accept_encoding.empty())
       {
-        add_header(headers, HeaderType::content_encoding, accept_encoding);
+        const auto& supported_encodings = get_supported_accept_encoding(accept_encoding);
+        if (!supported_encodings.empty())
+        {
+          add_header(headers, HeaderType::content_encoding, supported_encodings);
+        }
       }
     }
     else if (is_user_agent_endpoint(http_request.target))
