@@ -1,9 +1,3 @@
-# For Github
-.vscode
-codecrafters.yml
-vcpkg-configuration.json
-vcpkg.json
-
 # Prerequisites
 *.d
 

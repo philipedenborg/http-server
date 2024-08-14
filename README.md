@@ -7,7 +7,7 @@ This is a C++ solution to the
 protocol that powers the web. In this challenge, you'll build a HTTP/1.1 server
 that is capable of serving multiple clients."
 
-# Instructions (Codecrafter stuff excluded)
+# Instructions (Codecrafters stuff excluded)
 
 1. Ensure you have `cmake` installed locally
 1. Run `./your_server.sh` to run your program, which is implemented in
